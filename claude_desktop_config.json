@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "inventory": {
+      "command": "node",
+      "args": ["full_path_to/dist/server.js"],
+      "cwd": "full_path_to",
+      "env": {
+        "LARAVEL_API_URL": "http://localhost:80/api",
+        "LARAVEL_API_TOKEN": "YOUR_API_TOKEN_HERE"
+      }
+    }
+  }
+}
