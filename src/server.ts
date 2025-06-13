@@ -79,6 +79,19 @@ class InventoryMCPServer {
             }
           },
           {
+            name: 'get_inventory_items',
+            description: 'Get all inventory items, optionally filtered by search term',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                search: {
+                  type: 'string',
+                  description: 'Optional search term to filter items by name, description, or location'
+                }
+              }
+            }
+          },
+          {
             name: 'create_inventory_item',
             description: 'Create a new inventory item in a specific stock location',
             inputSchema: {
@@ -115,6 +128,62 @@ class InventoryMCPServer {
               },
               required: ['name', 'stock_location_id']
             }
+          },
+          {
+            name: 'update_inventory_item',
+            description: 'Update an existing inventory item by ID',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                item_id: {
+                  type: 'number',
+                  description: 'ID of the item to update'
+                },
+                name: {
+                  type: 'string',
+                  description: 'Name of the item'
+                },
+                stock_location_id: {
+                  type: 'number',
+                  description: 'ID of the stock location where item will be stored'
+                },
+                position: {
+                  type: 'string',
+                  description: 'Optional specific position within the location'
+                },
+                quantity: {
+                  type: 'number',
+                  description: 'Quantity of items'
+                },
+                description: {
+                  type: 'string',
+                  description: 'Optional description of the item'
+                },
+                unit_price: {
+                  type: 'number',
+                  description: 'Optional unit price of the item'
+                },
+                unit: {
+                  type: 'string',
+                  description: 'Optional unit of measurement (e.g., "pieces", "kg", "meters")'
+                }
+              },
+              required: ['item_id']
+            }
+          },
+          {
+            name: 'delete_inventory_item',
+            description: 'Delete an inventory item by ID',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                item_id: {
+                  type: 'number',
+                  description: 'ID of the item to delete'
+                }
+              },
+              required: ['item_id']
+            }
           }
         ]
       };
@@ -130,8 +199,14 @@ class InventoryMCPServer {
             return await this.getStockLocations((args as any)?.search);
           case 'create_stock_location':
             return await this.createStockLocation(args as any || {});
+          case 'get_inventory_items':
+            return await this.getInventoryItems((args as any)?.search);
           case 'create_inventory_item':
             return await this.createInventoryItem(args as any || {});
+          case 'update_inventory_item':
+            return await this.updateInventoryItem(args as any || {});
+          case 'delete_inventory_item':
+            return await this.deleteInventoryItem(args as any || {});
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
@@ -176,6 +251,37 @@ class InventoryMCPServer {
 
     } catch (error: any) {
       throw new Error(`Failed to get stock locations: ${error.response?.data?.message || error.message}`);
+    }
+  }
+
+  private async getInventoryItems(search?: string) {
+    try {
+      const params: any = {};
+      if (search) {
+        params.search = search;
+      }
+
+      const response = await axios.get(`${API_BASE_URL}/inventory-items`, {
+        headers: {
+          'Authorization': `Bearer ${API_TOKEN}`,
+          'Accept': 'application/json'
+        },
+        params
+      });
+
+      const items = response.data.data || response.data;
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Found ${items.length} inventory items${search ? ` matching "${search}"` : ''}:\n${JSON.stringify(items, null, 2)}`
+          }
+        ]
+      };
+
+    } catch (error: any) {
+      throw new Error(`Failed to get inventory items: ${error.response?.data?.message || error.message}`);
     }
   }
 
@@ -260,6 +366,70 @@ class InventoryMCPServer {
 
     } catch (error: any) {
       throw new Error(`Failed to create inventory item: ${error.response?.data?.message || error.message}`);
+    }
+  }
+
+  private async updateInventoryItem(args: any) {
+    try {
+      if (!args.item_id) {
+        throw new Error('item_id is required to update an inventory item');
+      }
+
+      const { item_id, ...updateData } = args;
+
+      // Remove any undefined values from updateData
+      const cleanUpdateData = Object.fromEntries(
+        Object.entries(updateData).filter(([_, value]) => value !== undefined)
+      );
+
+      const response = await axios.put(`${API_BASE_URL}/inventory-items/${item_id}`, cleanUpdateData, {
+        headers: {
+          'Authorization': `Bearer ${API_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Successfully updated inventory item (ID: ${item_id}): ${JSON.stringify(response.data, null, 2)}`
+          }
+        ]
+      };
+
+    } catch (error: any) {
+      throw new Error(`Failed to update inventory item: ${error.response?.data?.message || error.message}`);
+    }
+  }
+
+  private async deleteInventoryItem(args: any) {
+    try {
+      if (!args.item_id) {
+        throw new Error('item_id is required to delete an inventory item');
+      }
+
+      const { item_id } = args;
+
+      await axios.delete(`${API_BASE_URL}/inventory-items/${item_id}`, {
+        headers: {
+          'Authorization': `Bearer ${API_TOKEN}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Successfully deleted inventory item with ID: ${item_id}`
+          }
+        ]
+      };
+
+    } catch (error: any) {
+      throw new Error(`Failed to delete inventory item: ${error.response?.data?.message || error.message}`);
     }
   }
 
