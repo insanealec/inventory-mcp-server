@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import axios from 'axios';
 
-const API_BASE_URL = process.env.LARAVEL_API_URL || 'http://localhost:80/api';
+const API_BASE_URL = process.env.LARAVEL_API_URL || 'http://localhost:8000/api';
 const API_TOKEN = process.env.LARAVEL_API_TOKEN;
 
 interface StockLocation {
@@ -44,18 +44,53 @@ class InventoryMCPServer {
       return {
         tools: [
           {
-            name: 'store_inventory_item',
-            description: 'Store an inventory item in a specific location. Will search for the location and create it if needed, then save the item.',
+            name: 'get_stock_locations',
+            description: 'Get all available stock locations, optionally filtered by search term',
             inputSchema: {
               type: 'object',
               properties: {
-                item_name: {
+                search: {
                   type: 'string',
-                  description: 'Name of the item being stored'
+                  description: 'Optional search term to filter locations'
+                }
+              }
+            }
+          },
+          {
+            name: 'create_stock_location',
+            description: 'Create a new stock location',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                name: {
+                  type: 'string',
+                  description: 'Full name of the stock location'
                 },
-                location_description: {
+                short_name: {
                   type: 'string',
-                  description: 'Description of where the item is being placed (e.g., "main warehouse", "shelf A", "storage room")'
+                  description: 'Short name/code for the location'
+                },
+                description: {
+                  type: 'string',
+                  description: 'Optional description of the location'
+                }
+              },
+              required: ['name', 'short_name']
+            }
+          },
+          {
+            name: 'create_inventory_item',
+            description: 'Create a new inventory item in a specific stock location',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                name: {
+                  type: 'string',
+                  description: 'Name of the item'
+                },
+                stock_location_id: {
+                  type: 'number',
+                  description: 'ID of the stock location where item will be stored'
                 },
                 position: {
                   type: 'string',
@@ -63,7 +98,7 @@ class InventoryMCPServer {
                 },
                 quantity: {
                   type: 'number',
-                  description: 'Quantity of items being stored'
+                  description: 'Quantity of items'
                 },
                 description: {
                   type: 'string',
@@ -78,7 +113,7 @@ class InventoryMCPServer {
                   description: 'Optional unit of measurement (e.g., "pieces", "kg", "meters")'
                 }
               },
-              required: ['item_name', 'location_description']
+              required: ['name', 'stock_location_id']
             }
           }
         ]
@@ -91,8 +126,12 @@ class InventoryMCPServer {
 
       try {
         switch (name) {
-          case 'store_inventory_item':
-            return await this.storeInventoryItem(args);
+          case 'get_stock_locations':
+            return await this.getStockLocations((args as any)?.search);
+          case 'create_stock_location':
+            return await this.createStockLocation(args as any || {});
+          case 'create_inventory_item':
+            return await this.createInventoryItem(args as any || {});
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
@@ -109,25 +148,92 @@ class InventoryMCPServer {
     });
   }
 
-  private async storeInventoryItem(args: any) {
-    const {
-      item_name,
-      location_description,
-      position,
-      quantity,
-      description,
-      unit_price,
-      unit
-    } = args;
-
+  private async getStockLocations(search?: string) {
     try {
-      // Step 1: Search for stock location
-      const stockLocation = await this.findOrCreateStockLocation(location_description);
+      const params: any = {};
+      if (search) {
+        params.search = search;
+      }
 
-      // Step 2: Create the item
+      const response = await axios.get(`${API_BASE_URL}/stock-locations`, {
+        headers: {
+          'Authorization': `Bearer ${API_TOKEN}`,
+          'Accept': 'application/json'
+        },
+        params
+      });
+
+      const locations = response.data.data || response.data;
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Found ${locations.length} stock locations${search ? ` matching "${search}"` : ''}:\n${JSON.stringify(locations, null, 2)}`
+          }
+        ]
+      };
+
+    } catch (error: any) {
+      throw new Error(`Failed to get stock locations: ${error.response?.data?.message || error.message}`);
+    }
+  }
+
+  private async createStockLocation(args: any) {
+    try {
+      if (!args.name || !args.short_name) {
+        throw new Error('name and short_name are required to create a stock location');
+      }
+
+      const { name, short_name, description } = args;
+
+      const locationData = {
+        name,
+        short_name,
+        description
+      };
+
+      const response = await axios.post(`${API_BASE_URL}/stock-locations`, locationData, {
+        headers: {
+          'Authorization': `Bearer ${API_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Successfully created stock location: ${JSON.stringify(response.data, null, 2)}`
+          }
+        ]
+      };
+
+    } catch (error: any) {
+      throw new Error(`Failed to create stock location: ${error.response?.data?.message || error.message}`);
+    }
+  }
+
+  private async createInventoryItem(args: any) {
+    try {
+      if (!args.name || !args.stock_location_id) {
+        throw new Error('name and stock_location_id are required to create an inventory item');
+      }
+
+      const {
+        name,
+        stock_location_id,
+        position,
+        quantity,
+        description,
+        unit_price,
+        unit
+      } = args;
+
       const itemData: Partial<Item> = {
-        name: item_name,
-        stock_location_id: stockLocation.id,
+        name,
+        stock_location_id,
         position,
         description,
         quantity,
@@ -147,71 +253,13 @@ class InventoryMCPServer {
         content: [
           {
             type: 'text',
-            text: `Successfully stored "${item_name}" in location "${stockLocation.name}" (ID: ${stockLocation.id}). Item details: ${JSON.stringify(response.data, null, 2)}`
+            text: `Successfully created inventory item: ${JSON.stringify(response.data, null, 2)}`
           }
         ]
       };
 
     } catch (error: any) {
-      throw new Error(`Failed to store inventory item: ${error.response?.data?.message || error.message}`);
-    }
-  }
-
-  private async findOrCreateStockLocation(locationDescription: string): Promise<StockLocation> {
-    try {
-      // Search for existing stock locations
-      const searchResponse = await axios.get(`${API_BASE_URL}/stock-locations`, {
-        headers: {
-          'Authorization': `Bearer ${API_TOKEN}`,
-          'Accept': 'application/json'
-        },
-        params: {
-          search: locationDescription
-        }
-      });
-
-      const locations = searchResponse.data.data || searchResponse.data;
-
-      // If we found matching locations, return the best match
-      if (locations && locations.length > 0) {
-        // Return the first match (assuming API returns best matches first)
-        return locations[0];
-      }
-
-      // No matches found, create a new stock location
-      return await this.createStockLocation(locationDescription);
-
-    } catch (error: any) {
-      throw new Error(`Failed to find stock location: ${error.response?.data?.message || error.message}`);
-    }
-  }
-
-  private async createStockLocation(locationDescription: string): Promise<StockLocation> {
-    try {
-      // Generate short_name from location description (first 10 chars, uppercase, no spaces)
-      const shortName = locationDescription
-        .replace(/[^a-zA-Z0-9]/g, '')
-        .substring(0, 10)
-        .toUpperCase();
-
-      const newLocationData = {
-        name: locationDescription,
-        short_name: shortName,
-        description: `Auto-created location: ${locationDescription}`
-      };
-
-      const response = await axios.post(`${API_BASE_URL}/stock-locations`, newLocationData, {
-        headers: {
-          'Authorization': `Bearer ${API_TOKEN}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
-      });
-
-      return response.data;
-
-    } catch (error: any) {
-      throw new Error(`Failed to create stock location: ${error.response?.data?.message || error.message}`);
+      throw new Error(`Failed to create inventory item: ${error.response?.data?.message || error.message}`);
     }
   }
 
