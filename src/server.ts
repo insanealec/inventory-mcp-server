@@ -22,6 +22,12 @@ interface Item {
   quantity?: number;
   unit_price?: number;
   unit?: string;
+  sku?: string;
+  reorder_point?: number;
+  reorder_quantity?: number;
+  min_stock_level?: number;
+  max_stock_level?: number;
+  expiration_date?: string;
 }
 
 class InventoryMCPServer {
@@ -124,6 +130,30 @@ class InventoryMCPServer {
                 unit: {
                   type: 'string',
                   description: 'Optional unit of measurement (e.g., "pieces", "kg", "meters")'
+                },
+                sku: {
+                  type: 'string',
+                  description: 'Optional SKU/product code for the item'
+                },
+                reorder_point: {
+                  type: 'number',
+                  description: 'Optional quantity level at which to reorder this item'
+                },
+                reorder_quantity: {
+                  type: 'number',
+                  description: 'Optional quantity to order when reordering this item'
+                },
+                min_stock_level: {
+                  type: 'number',
+                  description: 'Optional minimum stock level to maintain'
+                },
+                max_stock_level: {
+                  type: 'number',
+                  description: 'Optional maximum stock level to maintain'
+                },
+                expiration_date: {
+                  type: 'string',
+                  description: 'Optional expiration date in YYYY-MM-DD format'
                 }
               },
               required: ['name', 'stock_location_id']
@@ -166,6 +196,30 @@ class InventoryMCPServer {
                 unit: {
                   type: 'string',
                   description: 'Optional unit of measurement (e.g., "pieces", "kg", "meters")'
+                },
+                sku: {
+                  type: 'string',
+                  description: 'Optional SKU/product code for the item'
+                },
+                reorder_point: {
+                  type: 'number',
+                  description: 'Optional quantity level at which to reorder this item'
+                },
+                reorder_quantity: {
+                  type: 'number',
+                  description: 'Optional quantity to order when reordering this item'
+                },
+                min_stock_level: {
+                  type: 'number',
+                  description: 'Optional minimum stock level to maintain'
+                },
+                max_stock_level: {
+                  type: 'number',
+                  description: 'Optional maximum stock level to maintain'
+                },
+                expiration_date: {
+                  type: 'string',
+                  description: 'Optional expiration date in YYYY-MM-DD format'
                 }
               },
               required: ['item_id']
